@@ -1,0 +1,706 @@
+                
+;*************************************************************
+
+; comandi VDP traccia blocco PIENO (HMMV)
+
+BARPGX
+        db  #00,#00         ; destinazione X
+        db  192             ; destinazione Y
+        db  #01             ; pagina destinazione
+        db  #10,#00         ; dimensione blocchi X
+        db  #40,#00         ; dimensione blocchi Y
+        db  #00             ; colore
+        db  #00             ; R#45 destinazione e direzione
+        db  #C0             ; comando HMMV e operazione logica
+
+;; Riempe l'infobar con colori ciclici
+;                
+;        ld  b,16
+;nblk:   
+;        exx
+;        wait_rdy                    
+;        vdp_cmd BARPGX,11        
+;        exx
+;        ld  a,(BARPGX+8)
+;        add  a,#11
+;        ld  (BARPGX+8),a
+;        ld  a,(BARPGX+0)
+;        add a,16
+;        ld  (BARPGX+0),a
+;        djnz    nblk
+
+;COLOR =(0,0,0,0):  db  #00,#00
+;COLOR =(1,0,1,2):  db  #02,#01
+;COLOR =(2,0,0,6):  db  #06,#00
+;COLOR=(3,0,3,7)    db  #07,#03
+;COLOR =(4,1,1,7):  db  #17,#01
+;COLOR =(5,5,0,3):  db  #53,#00
+;COLOR =(6,5,1,4):  db  #54,#01
+;COLOR=(7,6,0,4)    db  #64,#00
+;COLOR =(8,7,5,0):  db  #70,#05
+;COLOR =(9,7,6,0):  db  #70,#06
+;COLOR =(10,7,7,0): db  #70,#07
+;COLOR=(11,6,7,7)   db  #67,#07
+;COLOR =(12,0,4,5): db  #05,#04
+;COLOR=(13,0,2,3):  db  #03,#02
+;COLOR =(14,5,5,6): db  #56,#05
+;COLOR=(15,7,7,7)   db  #77,#07
+  
+
+;        IN  A,(#FF)
+;        LD  B,A
+;        IN  A,(#FE)
+;        XOR B
+;        LD  (OPRAM),A           ; SALVA PAGINA RAM ORDINARIA
+;        IN  A,(#FD)
+;        XOR B
+;        LD  (OPRAM2),A          ; SALVA PAGINA RAM ORDINARIA
+;        
+;        LD  A,(NPRAM)
+;        OUT (#FE),A             ; ATTIVA PAGINA RAM LIVELLO CORRENTE
+
+;        LD  A,(NPRAM2)
+;        OUT (#FD),A             ; ATTIVA PAGINA RAM PT3
+
+;        LD  A,(OPRAM)           ; RIPRISTINA LA VECCHIA PAGINA RAM
+;        OUT (#FE),A
+;
+;        LD  A,(OPRAM2)           ; RIPRISTINA LA VECCHIA PAGINA RAM
+;        OUT (#FD),A
+
+
+
+
+L81D9
+    LD  A,D         ; PONE UNO SPRITE
+    OUT (#98),A
+    LD  A,E
+    OUT (#98),A
+    LD  A,C
+    ADD A,A
+    ADD A,A
+    OUT (#98),A
+    INC C
+    OUT (#98),A
+    RET
+
+
+    LD  A,#07           ; PREPARA SCRITTURA SPRITE
+    OUT (#99),A
+    LD  A,#8E
+    OUT (#99),A
+    LD  A,#00
+    OUT (#99),A
+    LD  A,#76
+    OUT (#99),A
+    
+              db  128,16, 32,240, 0,0, 64,0
+            db  64,16,  64,240, 0,0, 64,48
+            ds  8*4
+
+        
+        ld  a,(Xpatch)
+        sub a,8
+        ld  h,a
+        LD  a,(XPOS)        ; CALCOLA OFFSET
+        bit 3,a
+        jr  z,pos2
+        or #F0
+pos2    add a,h             ; da -8,+7 a +0,+15 o +1,+16
+        ld  e,a
+
+        ld  a,(Ypatch)
+        inc a
+        ld  l,a
+        LD  a,(YPOS)        ; CALCOLA OFFSET
+        add a,l
+        ld  c,a              ; da +0,15 a -1,+14 o +0,+15
+
+        ld  a,(L8100)
+        and #7F
+        sub BASEL .and. #7F
+        ld  l,a
+        ld  h,0
+        ld  d,h
+        x16 hl
+        add hl,de
+        ld  (scrX),hl
+;        ld  a,l
+;        vdp 12
+;        ld  a,h
+;        vdp 13
+        
+        ld  hl,(L8100)
+        ld  de,BASE
+        xor a
+        ld  b,a
+        sbc hl,de
+        add hl,hl   
+        ld  a,h
+        and #7F
+        ld  h,b
+        ld  l,a
+        inc hl
+        x16 hl
+        xor a
+        sbc hl,bc
+        ld  (scrY),hl
+
+        ld  a,l
+        vdp 12
+        ld  a,h
+        vdp 13
+
+        ret
+
+
+
+    ;**********************************************************
+    ;                GESTIONE MOVIMENTO SPRITES
+
+
+L8126   OR  (IY+0)
+    LD  (IY+0),A
+    RET
+L812D   AND (IY+0)
+    LD  (IY+0),A
+    RET
+L8134   JR  NZ,L8138
+    ADD HL,DE
+    RET
+L8138   AND A
+    SBC HL,DE
+    RET
+
+        ; GESTIONE ANIMAZIONE TRENTADUE SPRITE
+
+
+MOVSPRT
+    BIT 7,(IY+0)        ; FINE SE DISATTIVO 
+    RET NZ
+
+    LD  A,(IY+0)
+    AND 15          ; ISOLA TIPO DI SPRITE
+    LD  L,A
+    LD  H,0
+    ADD HL,HL
+    ADD HL,HL
+    ADD HL,HL
+    ADD HL,HL
+    PUSH    HL
+    ADD HL,HL
+    LD  DE,DXDY
+    ADD HL,DE
+    LD  DE,(L8123)
+    LD  D,0
+    ADD HL,DE
+    ADD HL,DE
+    LD  C,L         ; IN BC INCREMENTO CORRENTE
+    LD  B,H
+    POP HL          ; SETTA FRAME CORRENTE VERSO DESTRA O VERSO SINISTRA  
+    ADD HL,DE
+    LD  DE,RANIM
+    BIT 6,(IY+0)
+    JR  Z,L816B
+    LD  DE,LANIM
+L816B   ADD HL,DE
+    LD  A,(HL)
+    LD  (IX+0),A        
+
+    LD  L,(IX+1)        ; IN HL LA X CORRENTE
+    LD  H,(IX+2)
+    LD  A,(BC)
+    CP  #7F
+    CCF
+    LD  E,A
+    SBC A,A
+    LD  D,A
+    BIT 6,(IY+0)        ; SOMMA/SOTTRAI INCREMENTO CORRENTE SULLA X
+    CALL    L8134
+    LD  (IX+1),L
+    LD  (IX+2),H
+    ADD HL,HL
+    ADD HL,HL
+    ADD HL,HL
+    ADD HL,HL
+    LD  A,(IY+1)        ; CONTROLLA LIMITI
+    CP  H
+    LD  A,#BF
+    CALL    NC,L812D        ;  VAI A DESTRA
+    LD  A,H
+    CP  (IY+2)
+
+    LD  A,#40
+    CALL    NC,L8126        ;  VAI A SINISTRA
+    INC BC
+
+    LD  L,(IX+3)        ; IN HL LA Y CORRENTE
+    LD  H,(IX+4)
+    LD  A,(BC)
+    CP  #7F
+    CCF
+    LD  E,A
+    SBC A,A
+    LD  D,A
+    BIT 5,(IY+0)        ; SOMMA/SOTTRAI INCREMENTO CORRENTE SULLA Y
+    CALL    L8134
+    LD  (IX+3),L
+    LD  (IX+4),H
+    ADD HL,HL
+    ADD HL,HL
+    ADD HL,HL
+    ADD HL,HL
+    LD  A,(IY+3)        ; CONTROLLA LIMITI
+    CP  H
+    LD  A,#DF
+    CALL    NC,L812D        ;  SCENDI
+    LD  A,H
+    CP  (IY+4)
+    LD  A,#20
+    CALL    NC,L8126        ;  SALI
+    RET
+
+PROX    LD  DE,5            ; PREPARA PROSSIMO SPRITE 
+    ADD IY,DE
+    ADD IX,DE
+    RET
+
+
+
+        ld  a,(nsprt)       ; max 16 sprite di 2 colori per linea
+        and a
+        jp  z,nosprite
+        LD  B,a
+        LD  C,0
+        push    bc
+        
+        LD  IX,TABSPRT
+
+        exx 
+        ld  de,SPTCOL
+        exx
+        ld  iy,SPTATR
+maskbrd
+        bit 7,(IX+3)
+        call    nz,sprtSX
+        bit 6,(IX+3)
+        call    nz,sprtDX
+        ld  de,4
+        add ix,de
+        DJNZ    maskbrd
+
+        LD  IX,TABSPRT
+        pop bc
+;L822F   
+        LD  A,(IX+0)
+        add a,l
+        ld  (iy+0),a        ; verticale
+        ld  (iy+4),a        ; verticale
+    
+        LD  A,(IX+1)
+        add a,h
+        ld  (iy+1),a        ; orizzontale
+        ld  (iy+5),a        ; orizzontale
+    
+        exx
+        ld  c,0
+        bit 7,(IX+3)
+;        jr  z,noseteclk
+        ld  c, #80
+;noseteclk
+        ld  b,16
+        ld  a,4             ; colore primo sprt
+        or  c
+;rnd7    ld  (de),a
+        inc de
+;        djnz  rnd7
+        ld  b,16
+        ld  a,8 .or. (64)   ; colore secondo sprt
+        or  c
+;rnd8    ld  (de),a
+        inc de
+;        djnz  rnd8
+        exx
+    
+        ld  a,4
+        add a,c
+        ld  (iy+2),a
+        add a,4
+        ld  (iy+6),a
+        ld  c,a
+            
+        ld  de,4
+        add ix,de
+        ld  e,8
+        add iy,de
+ ;       DJNZ    L822F
+
+        LD  A,#D8           ; SPEGNE GLI EVENTUALI NON ATTIVI
+        ld  (iy+0),a
+
+        push    iy          ; ld    e,IYL;  db #FD,#5D 
+        pop     hl          ; ld    d,IYH;  db #FD,#5C
+        ld  de,SPTATR-2
+        xor a
+        sbc hl,de
+        ld  a,l
+        ld  (nbyteattsprt),a
+
+
+        exx
+        ex  de,hl
+        ld  de,SPTCOL-1
+        xor a
+        sbc hl,de
+        ld  a,l
+        ld  (nbytecolsprt),a
+        exx
+
+        ret
+
+
+;nosprite 
+        LD  A,#D8           ; SPEGNE GLI EVENTUALI NON ATTIVI
+        ld  (iy+0),a
+        ld  a,1
+        ld  (nbyteattsprt),a
+        RET
+
+
+bar_proc:
+
+;   processa ora i bordi e la posizione del prossimo frame
+
+        LD  A,(TIMER)
+        and a
+        jr  NZ,noswap
+swap        
+        LD  A,(ACTPG)           ; Cambia la pagina di destinazione in cui il VDP lavora 
+        ld  (BRDMSKDST+3),a
+        ld  (BRDNEWDST+3),a
+        XOR #01
+        LD  (ACTPG),A
+noswap
+
+        ld a,(XDIR2)
+        cp  1
+        jp  z,borderSX
+        cp  -1
+        jp  z,borderDX
+        jp noborder
+
+borderDX
+        ld  a,(XPOS)
+        bit 3,a
+        jr  z,poss
+        or  #F0
+poss:   sub 7
+        jp p,noborder
+        ld  (BRDMSKDST+0),a
+        ld  (BRDNEWORG+0),a
+        sub 15*16
+        ld  (BRDNEWDST+0),a         ; A compreso tra 0 e 15
+        jr border       
+borderSX
+        ld  a,(XPOS)
+        bit 3,a
+        jr  z,pos
+        or  #F0
+pos:    add a,7
+        jp m,noborder
+        ld  (BRDMSKDST+0),a         ; A compreso tra 0 e 15
+        add a,15*16
+        ld  (BRDNEWORG+0),a
+        ld  (BRDNEWDST+0),a
+border
+
+;        ld  a,3
+;        vdp 7
+         
+        wait_rdy                    
+        vdp_cmd BRDMSKDST,11        ; cancella bordo con una linea nera nella pagina visibile
+
+;       ld  a,8
+;       vdp 7
+;       call    MOVSPRT
+;        ld  a,4
+;        vdp 7
+;        call    PUTSPRT
+;        xor a
+;        vdp 7
+
+;        r2v8i    SPTATR,7600h,(nbyteattsprt)  ; Setta gli sprite (quando servirà)                        
+
+;        ld  a,4
+;        vdp 7
+        wait_rdy                    
+        vdp_cmd BRDNEWORG,15        ; copia una nuova linea nell'altro bordo nella pagina visibile
+
+;        r2v16    SPTCOL,7400h,(nbytecolsprt)  ; Setta colori degli sprite (quando servirà)               
+        
+;        xor a
+;        vdp 7
+        
+        ret
+
+noborder
+;       ld  a,8
+;       vdp 7
+;       call    MOVSPRT
+;        ld  a,4
+;        vdp 7
+;        call    PUTSPRT
+;        xor a
+;        vdp 7
+
+;        r2v8i    SPTATR,7600h,(nbyteattsprt)  ; Setta gli sprite (quando servirà)                        
+;        r2v16    SPTCOL,7400h,(nbytecolsprt)  ; Setta colori degli sprite (quando servirà)               
+        
+        ret
+
+
+        ld  a,(TIMER)               ; Attezione: assume VSCSZ+1 = 12
+        x4  a
+        ld l,a
+        add a,a
+        add a,l
+;        ld  de,VSCSZ+1
+;        AxDE
+;        ld  a,l
+        ld (BRDMSKPGX+2),a          ; Prepara ordinata del blocco nero
+
+
+
+
+;setclrshp
+;
+;        LD  a,(TIME)
+;        ld  (spritbuff+1),a    
+;        ld  hl,spritbuff+1
+;        ld  e,l
+;        ld  d,h
+;        inc de
+;        ld  bc,15
+;        ldir
+;        
+;        add a,64
+;        ld  (hl),a
+;        ld  bc,15
+;        ldir
+;
+;        jp  setclrshp1
+;        
+;        ld  a,(TIMER)
+;        and 1
+;        jp  z,setclrshp1
+;        jp  setclrshp2
+;
+; 7400h     colori sprite
+; 7600h     attributi sprite
+; 7800h     forme sprite
+;
+;MAXPSRTXFRM equ 10
+;
+;setclrshp1
+;        ld  de,7400h+16*10      
+;        call    setvramaddr_w 
+;
+; destinazione Y    7800h + 32*10
+;
+;        ld  a,128       ;   #80
+;        ld  (cpyshp+4),a
+;        ld  a,242       ;   #F2
+;        ld  (cpyshp+6),a
+;
+;        LD  ix,spritbuff
+;        LD  a,(ix+0)            ; numero sprite totale
+;        sub  MAXPSRTXFRM
+;        ld  (spritbuff_rm),a
+;        jp  m,rn1              ; fino a MAXPSRTXFRM
+;        ld  a,MAXPSRTXFRM     
+;        jp rn3
+;rn1     LD  a,(ix+0) 
+;
+;rn3     ld  b,a
+;        inc ix
+;
+;nxtsprt
+;        EXX      
+;
+;       elabora quale colore lo punta in hl
+;
+;        ld  l,(ix+16)      
+;        ld  h,0
+;        x32 hl
+;        ld  de,SPRTCOL        
+;        add hl,de
+;        ld  bc,32*256+vdpport0
+;        otir
+;        
+;       elabora quale forma e la mette nelle destinazioni
+;
+;        ld c,(ix+0)      
+;        xor a
+;        sra c                   ; Y = c*(32+32)/128 = c/2
+;        rra                     ; X = 128 * (c mod 2)
+;        ld  (cpyshp+0),a
+;        ld  a,16*(VSCSZ+1)
+;        add   a,c
+;        ld  (cpyshp+2),a
+;
+;        wait_rdy            
+;        vdp_cmd cpyshp,15
+;
+;        EXX
+;
+;        ld  a,(cpyshp+4)
+;        add a,#80
+;        ld  (cpyshp+4),a
+;        jr  nc,noriporto
+;        ld  a,(cpyshp+6)
+;        inc a
+;        ld  (cpyshp+6),a
+;noriporto
+;        inc ix
+;        DJNZ    nxtsprt
+;        
+;        RET
+;***************************************************************
+;setclrshp2
+;        ld  a,(spritbuff_rm)
+;        and a
+;        ret m
+;        ret z
+;        
+;        ld  de,7400h+16*10+32*MAXPSRTXFRM
+;        call    setvramaddr_w 
+;
+;        LD  ix,spritbuff+MAXPSRTXFRM
+;        LD  a,(spritbuff_rm)     ; numero sprite resudui
+;        
+;        jp rn3
+;        
+;***************************************************************
+; comandi VDP copia blocco forma sprite
+;
+;cpyshp  db  #00,#00             ; origine X
+;        db  (VSCSZ+1)*16,#03    ; origine Y
+;        db  128,#00             ; destinazione X
+;        db  242,#00             ; destinazione Y    ; 7800h + 32*10
+;        db  128,#00             ; 32+32 byte = 128 punti
+;        db  #01,#00             ; dimensione blocchi
+;        db  #00,#00,#D0
+;
+;***************************************************************
+; comandi VDP copia blocco forma sprite
+;
+;
+;setECcmd
+;        db    0,#00             ; destinazione X
+;        db  232,#00             ; destinazione Y    ; 7400h 
+;        db   32,#00             ; 16 byte = 16 punti
+;        db  #01,#00             ; dimensione blocchi
+;        db  128,#00,#82         ; LMMV ed OR
+;
+;setEC
+;        
+;        ld  a,(vdpregs0+0)
+;        or  1110b
+;        vdp 0
+;
+;        xor a
+;        ld  (setECcmd+0),a
+;        ld  a,232        
+;        ld  (setECcmd+2),a
+;        
+;        ld  hl,SPTATR+3
+;        ld  b,20
+;rn10
+;        bit 7,(hl)
+;        jr  nz,rn0
+;        exx
+;        wait_rdy         
+;        vdp_cmd setECcmd,11
+;        exx
+;rn0
+;        ld  de,4
+;        add hl,de
+;        ld  a,(setECcmd+0)
+;        add a,32
+;        ld  (setECcmd+0),a
+;        jr  nc,rn11
+;        ld  a,(setECcmd+2)
+;        inc a
+;        ld  (setECcmd+2),a
+;rn11
+;        djnz    rn10
+;        wait_rdy        
+;        ld  a,(vdpregs0+0)
+;        vdp 0
+;        ret
+
+;************************************************************
+;       Poni attributi sprites
+;       
+;        call initPSPRT
+;        call putNxtSprt
+;
+;************************************************************
+;       Poni Colori sprites
+;************************************************************
+;
+;        ld  a,(nsprt) 
+;        XOR A   ; NO SPRITE
+;        and a
+;        jp  z,exit2Loop
+;        
+;        ld  b,a
+;NWBLK5  exx
+;        call putNxtSprt
+;        exx
+;        DJNZ    NWBLK5
+;
+;        ld  a,(nsprt) 
+;        ld  b,a
+;        LD  HL,SPTCOLLS
+;        
+;        xor a
+;        ld  (xdest),a
+;        ld  a,232
+;        ld  (ydest),a
+;
+;NWBLK4
+;        
+;        xor     a       
+;        rld             
+;        ld  e,a         
+;        ld  a,(hl)      
+;        ld  (xorg),a
+;                        
+;        ld a,e          
+;        add a,160       
+;        ld  (yorg),a    
+; 
+;        EXX
+;        ld  a,15
+;        vdp 7
+;        wait_rdy               ; ASPETTA VDP PRONTO
+;        vdp_cmd xorg,15
+;        xor a
+;        vdp 7
+;        EXX
+;
+;        ld  a,(xdest)
+;        add a,16
+;        ld  (xdest),a
+;        jr  nc,noinc
+;        ld  a,(ydest)
+;        inc a
+;        ld  (ydest),a
+;noinc
+;
+;        inc hl
+;        
+;        DJNZ    NWBLK4
+;exit2Loop
+

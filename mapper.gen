@@ -1,0 +1,265 @@
+
+;memory mapper routines
+;for compatibility DOS1/DOS2
+;made by Nestor Soriano/Arjan Bakker
+
+
+
+
+
+; Routines for writing the mapper (if DOS2 not present)
+; In : A = segmentnumber
+; Out: -
+; Changes: - (also when relinked to DOS2 routines)
+; Like DOS2 WriteFF has no effect. It is never allowed to
+; change page 3.
+WriteFC:     LD    (StoreFC),A
+             OUT   (#FC),A
+             RET
+WriteFD:     LD    (StoreFD),A
+             OUT   (#FD),A
+             RET
+WriteFE:     LD    (StoreFE),A
+             OUT   (#FE),A
+WriteFF:     RET
+             DW    0
+; Routines for reading the mapper
+; In : -
+; Out: A = segmentnumber
+; Changes: - (also when relinked to DOS2 routines)
+ReadFC:      LD    A,(StoreFC)
+             RET
+ReadFD:      LD    A,(StoreFD)
+             RET
+ReadFE:      LD    A,(StoreFE)  ;#0131-3
+             RET
+ReadFF:      LD    A,(StoreFF)  ;#0135-7
+             RET
+             
+             
+;Init mapper routines
+;Call once before using Read/Write routines!
+;Out: A: 0 = success, 255 = failure
+InitMapRouts:   LD  A,(#FB20)         ;Not necessary
+                RRCA                    ;under MSX-DOS
+        jp  nc,count_map    ;in DOS1 we need to check memory by counting segments
+
+                XOR A
+                LD  DE,0402H          ; ID/functionnr
+                CALL    #FFCA
+                OR  A
+        jp  z,count_map ;in DOS1 we need to check memory by counting segments
+
+        ld  de,alloc_seg
+        ld  bc,3
+        ldir    ;copy jump to ALL_SEG
+
+                LD    BC,18H - 3
+                ADD   HL,BC             ; Jumpadres PUT_P0
+                LD    DE,writefc + 3    ; Copy jumps
+                LD    C,3
+                LDIR
+                LD    DE,readfc
+                LD    C,3
+                LDIR
+                LD    DE,writefd + 3
+                LD    C,3
+                LDIR
+                LD    DE,readfd
+                LD    C,3
+                LDIR
+                LD    DE,writefe + 3
+                LD    C,3
+                LDIR
+                LD    DE,readfe
+                LD    C,3
+                LDIR
+                LD    DE,writeff + 3
+                LD    C,3
+                LDIR
+        ld  de,readff
+        ld  c,3
+        ldir
+
+        ld  hl,writeff + 6
+        ld  de,WriteFC + 3
+        ld  bc,3
+        ldir
+        ld  de,WriteFD + 3
+        ld  bc,3
+        ldir
+        ld  de,WriteFE + 3
+        ld  bc,3
+        ldir
+        
+;       ld  de,WriteFF + 3
+;       ld  bc,3
+;       ldir
+
+        call    readff
+        ld  (segment_table),a
+        call    readfe
+        ld  (segment_table + 1),a
+        call    readfd
+        ld  (segment_table + 2),a
+        call    readfc
+        ld  (segment_table + 3),a
+
+
+        ld  b,4 ;we need 4 more memory segments
+        ld  hl,segment_table + 4    ;store segmentnumbers in this table
+alloc_lp:   push    bc
+        push    hl
+        xor a   ;user segment
+        ld  b,a ;segment needs to be in primary mapper
+        call    alloc_seg   ;allocate the segment
+        jr  c,no_alloc  ;carry set if no segment could be allocated -> error!
+        pop hl
+        pop bc
+        ld  (hl),a  ;store segment in table
+        inc hl
+        djnz    alloc_lp
+        
+        xor a
+        ret
+        
+no_alloc:   ld  a,255
+        ret     
+        
+;----------------------------------
+;memory check routine's(may be destroyed after correct start-up)
+
+readfc:     defs    3
+readfd:     defs    3
+readfe:     defs    3
+readff:     defs    3
+
+writefc:    call    get_segment
+        defs    3
+writefd:    call    get_segment
+        defs    3
+writefe:    call    get_segment
+        defs    3
+writeff:    call    get_segment
+        defs    3
+        jp  writefc
+        jp  writefd
+        jp  writefe
+        jp  writeff
+
+
+alloc_seg:  defb    0,0,0
+
+
+;get segment number
+;In: A: mapper-page number
+get_segment:    push    hl
+        push    af
+        ld  hl,segment_table
+        ADD_HL_A
+        ld  h,(hl)
+        pop af
+        ld  a,h
+        pop hl
+        ret
+
+
+; Count number of pages in memory mapper
+; Out: DE: number of pages
+count_map:  call    store_old       ;save old mapper data
+                call    check_map       ;count number of pages
+                call    restore_old     ;restore old mapper data
+                
+        ld  (mem_size),de
+
+        IF  DEBUG=1
+        ld  a,%00011111
+        out (#2e),a
+        ld  a,e
+        out (#2f),a
+        ENDIF
+        
+        ld  a,1
+        out (#fe),a
+        
+        ld  hl,7    ;minimum of 8 pages required!
+        DCOMPR
+        ld  a,0     ;standard success
+        LDNC    a,255   ;if HL-DE > 0 -> failure (less than 128K RAM)
+            ret
+
+; save old mapper data
+store_old:  ld      bc,0    ;B=counter, C=current page
+            ld      hl,mem_table  ;temporary storing place
+
+store_old_lp:   ld      a,c
+            out     (#fe),a
+
+            ld      a,(#8000)
+            ld      (hl),a          ;store old value
+
+            xor     a
+            ld      (#8000),a
+
+            inc     hl
+            inc     c
+            djnz    store_old_lp
+            ret
+
+
+; Count number of pages
+; Out: D: number of mapper pages
+check_map:  xor a
+        ld  (StoreFF),a
+        inc a
+        WRITE_FE
+        inc a
+        WRITE_FD
+        inc a
+        WRITE_FC
+
+        ld      de,0     ;number of pages
+
+check_map_lp:   ld      a,e
+                out     (#fe),a
+
+                ld      a,(#8000)
+            or      a       ;Already counted this page? (255=already counted)
+            ret     nz      ;Yes -> done counting
+
+            dec     a
+            ld      (#8000),a       ;counted this page
+
+                inc     de
+                jr      check_map_lp
+
+; Restore old mapper data
+restore_old:    ld      c,0
+                ld      b,e     ;number of pages to be restored
+                ld      hl,mem_table
+
+restore_old_lp:
+        ld      a,c
+                out     (#fe),a
+
+                ld      a,(hl)
+                ld      (#8000),a
+                inc     hl
+                inc     c
+                djnz    restore_old_lp
+                ret
+                
+mem_table:  defs    256
+mem_size:   defw    0
+
+
+; storage space under DOS1
+StoreFF:    DB    0
+StoreFE:        DB    1
+StoreFD:        DB    2
+StoreFC:        DB    3
+
+
+segment_table:  defb    3,2,1,0
+        defb    4,5,6,7 ;the 8 segments this program uses          
+            

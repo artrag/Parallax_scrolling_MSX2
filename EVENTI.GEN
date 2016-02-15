@@ -1,0 +1,216 @@
+
+    ;*************************************************************
+    ;               GESTIONE EVENTI SPECIALI
+
+
+
+EVENTI
+    LD  HL,(SOTTO)      ; CONTROLLA SE TOCCO UNA LOCAZIONE DI EENTI SPECIALI
+    LD  (L8AA6),HL
+    CALL    BINSEARCH
+    LD  HL,(SOTTO)
+    LD  DE,128
+    ADD HL,DE
+    LD  (L8AA6),HL
+    CALL    BINSEARCH
+    LD  A,(UNDUE)
+    AND A
+    RET Z
+    LD  HL,(SOTTO)
+    INC HL
+    LD  (L8AA6),HL
+    CALL    BINSEARCH
+    LD  HL,(SOTTO)
+    LD  DE,129
+    LD  (L8AA6),HL
+    CALL    BINSEARCH
+    RET
+
+L8AA6   db  0
+L8AA7   db  0
+L8AA8   dw  #8000+19+(48+3)*128+7,#8000+7000        ; LOCAZIONI SPECIALI
+    dw  #8000+7001,#8000+7002
+    dw  #8000+7003,#8000+7004
+    dw  #8000+7005,#8000+7006
+    dw  #8000+7007,#8000+36+60*128
+    DW  R1,R2,R3,R4,R5,R6,R7,R8,R9,R10
+
+
+    ;       GESTIONE EVENTI SPECIALI
+
+
+TEMP    DW  0
+
+R1  LD  A,(NUMSF)
+    CP  TOTSF
+    RET C
+    LD  HL,(SOTTO)
+    LD  (TEMP),HL
+    LD  HL,#8000+48*128+19
+    LD  (SOTTO),HL
+    CALL    BLOKTEST
+    LD  HL,#8000+49*128+19
+    LD  (SOTTO),HL
+    CALL    BLOKTEST
+    LD  HL,(TEMP)
+    LD  (SOTTO),HL
+    RET
+R2
+R3
+R4
+R5
+R6
+R7
+R8
+R9  RET
+R10 LD  A,-1
+    LD  (OUT),A
+    RET
+
+BINSEARCH
+    LD  BC,L0900        ; CONTROLLA SE E QUALE EVENTO
+L8B10   LD  A,B         ; SPECIALE AZIONARE
+    SUB C
+    RET C
+    LD  A,C
+    ADD A,B
+    AND #FE
+    LD  E,A
+    LD  D,#00
+    LD  HL,L8AA8
+    ADD HL,DE
+    LD  A,(L8AA7)
+    INC HL
+    CP  (HL)
+    DEC HL
+    JR  C,L8B38
+    JR  Z,L8B2A
+    JR  L8B32
+L8B2A   LD  A,(L8AA6)
+    CP  (HL)
+    JR  C,L8B38
+    JR  Z,L8B3E
+L8B32   SRL E
+    INC E
+    LD  C,E
+    JR  L8B10
+L8B38   SRL E
+    DEC E
+    LD  B,E
+    JR  L8B10
+L8B3E   LD  BC,L0014
+    ADD HL,BC
+    LD  E,(HL)
+    INC HL
+    LD  D,(HL)
+    LD  L,E
+    LD  H,D
+    JP  (HL)
+
+    ;************************************************
+    ;         ASCENSORE
+
+
+ASCENSORE
+    LD  HL,(SOTTO)      ; ASCENSORE
+    LD  DE,128
+    ADD HL,DE
+    LD  A,(UNDUE)
+    AND A
+    CALL    NZ,L8B56
+L8B56   LD  A,(HL)
+    CP  #FC
+    INC HL
+    RET C
+    LD  HL,(SOTTO)
+    CALL    YTEST
+    RET NZ
+    LD  HL,DELTY
+    LD  (HL),-1
+    RET
+
+    ;****************************************************
+    ;             BLOCCHI CHE SI ROMPONO
+
+
+BLOKTEST
+    LD  B,5         ; CONTROLLA SE PASSO SU BLOCCHI CHE ESPLODONO
+    LD  DE,L8114
+    LD  IX,L8119
+L8B6A   LD  A,(DE)
+    AND A
+    JR  Z,L8B76
+    INC DE
+    INC IX
+    INC IX
+    DJNZ    L8B6A
+    RET
+L8B76   LD  HL,(SOTTO)
+    INC H
+    LD  A,(HL)
+    CP  #40
+    JR  Z,L8B89
+    LD  A,(UNDUE)
+    AND A
+    RET Z
+    INC HL
+    LD  A,(HL)
+    CP  #40
+    RET NZ
+L8B89   LD  A,#04           ; ATTIVA BLOCCO
+    LD  (DE),A
+    LD  (IX+0),L
+    LD  (IX+1),H
+    RET
+
+BLOCKANIM
+    LD  B,5         ; ANIMA BLOCCHI ATTIVI
+    LD  IX,L8114
+    LD  IY,L8119
+L8B9D   LD  A,(IX+0)
+    AND A
+    CALL    NZ,L8BAD
+    INC IX
+    INC IY
+    INC IY
+    DJNZ    L8B9D
+    RET
+L8BAD   DEC (IX+0)
+    LD  HL,BASE+4
+    LD  E,A
+    LD  D,0
+    XOR A
+    SBC HL,DE
+    LD  A,(HL)
+    LD  L,(IY+0)
+    LD  H,(IY+1)
+    CP  "\"
+    CALL    Z,COPRI         ; SE L'ANIMAZIONE E' FINITA
+                    ; CALCOLA BLOCCO DI COPERTURA
+    LD  (HL),A
+    RET
+BASE    db  "A","B","C","\"
+
+BLOCK   LD  A,(L8123)
+    AND A
+    RET NZ
+    CALL    BLOKTEST        ; CONTROLLA
+    CALL    BLOCKANIM       ; ANIMA
+    RET
+
+COPRI   LD  D,H         ; CALCOLA QUALE BLOCCO
+    LD  E,L         ; FONDALE SERVE PER
+    LD  A,L         ; SOSTITUIRE LA SFERA
+    AND 7
+    ADD A,5
+    LD  C,A
+
+    ADD HL,HL
+    LD  A,H
+    AND 3
+    ADD A,5
+    x16 A
+    ADD A,C
+
+    EX  DE,HL
+    RET

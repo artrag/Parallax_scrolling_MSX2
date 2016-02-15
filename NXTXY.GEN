@@ -1,0 +1,53 @@
+; Update XPOS and YPOS
+nxtxy:
+        ld  a,(XPOS)
+        ld  (XPOS_CR),a
+        ld  b,a
+        ld  a,(XDIR2)
+        add a,b
+        and #0F
+        ld  (XPOS),a
+
+        ld  a,(YPOS)
+        ld  (YPOS_CR),a
+        ld  b,a
+        ld  a,(YDIR2)
+        add a,b
+        and #0F
+        ld  (YPOS),a
+
+        ld  a,(TMPXPOS)         ; Gestione cambio bordo laterale in caso di cambio direzione
+        bit 7,a
+        call    nz, ALLINEAX
+
+        ld  a,(TMPYPOS)         ; Gestione cambio bordo verticale in caso di cambio direzione
+        bit 7,a
+        call    nz, ALLINEAY
+
+        ret
+
+         ;**************************************************
+         ;         Riallinea Bordo orizzontale e verticale
+         ;         in caso di cambio direzione
+
+ALLINEAX
+        and #0F
+        ex  af,af'
+        ld  a,(XPOS)
+        ld  (XPOS_CR),a
+        ex af,af'
+        ld  (XPOS),a
+        xor a
+        ld  (TMPXPOS),a
+        ret
+
+ALLINEAY
+        and #0F
+        ex  af,af'
+        ld  a,(YPOS)
+        ld  (YPOS_CR),a
+        ex af,af'
+        ld  (YPOS),a
+        xor a
+        ld  (TMPYPOS),a
+        ret

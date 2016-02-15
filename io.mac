@@ -1,0 +1,146 @@
+; ---------------------------------------------------------------------------
+; Assembly I/O class
+; Original for RBC compiler
+; (c) A&L Software  1997
+;
+; Implemented functions:
+; OPENF, READF, WRITEF, CLOSEF
+;
+; Error codes: 0   - ok
+;              1   - end of file or disk full
+;              2   - read error
+;              3   - invalid operation
+;              255 - file not found or directory full
+; ---------------------------------------------------------------------------
+
+; ------------------------------------------
+; Open a file for reading/writing
+; Input : HL - ASCIIZ string with file name
+;              format: D:FILENAME.EXT
+;         A  - operation: 0-read, 1-write
+;         DE - FCB (37 bytes)
+; Output: A  - error code
+; Modify: all registers
+; ------------------------------------------
+OPENF:  push af
+        call INFCB                      ; initialize FCB
+        pop af
+        or a
+        jr z,openf0
+        cp 1
+        jr z,openf1
+        ld a,3
+        ret
+openf0: ld c,0fh                        ; open file for reading
+        call 5
+        ret
+openf1: ld c,16h                        ; open file for writing
+        call 5
+        ret
+
+; ------------------------------------------
+; Close a file
+; Input : DE - FCB (37 bytes)
+; Output: none
+; Modify: all registers
+; ------------------------------------------
+CLOSEF: ld c,10h
+        call 5
+        ret
+
+; ------------------------------------------
+; Read 128 bytes from a read opened file
+; Input : HL - destination address
+;         DE - FCB (37 bytes)
+; Output: A  - error code
+; Modify: all registers
+; ------------------------------------------
+READF:  call SETDMA
+        ld c,14h
+        call 5
+        ret
+
+; ------------------------------------------
+; Write 128 bytes to a write opened file
+; Input : HL - data address
+;         DE - FCB (37 bytes)
+; Output: A  - error code
+; Modify: all registers
+; ------------------------------------------
+WRITEF: call SETDMA
+        ld c,15h
+        call 5
+        ret
+
+; ------------------------------------------
+; Initialize FCB with filename
+; Input : HL - ASCIIZ string with file name
+;              format: D:FILENAME.EXT
+;         DE - FCB (37 bytes)
+; Output: none
+; Modify: AF,BC,HL,IX
+; ------------------------------------------
+INFCB:  push de                         ; initialize FCB
+        xor a
+        ld (de),a
+        inc de
+        ld a,20
+        ld b,11
+        call infcb3                     ; clear filename
+        push de
+        pop ix
+        dec ix
+        dec ix
+        dec ix                          ; IX points to file extension
+        ld b,25
+        xor a
+        call infcb3                     ; clear FCB
+        pop de
+        push de
+        inc de                          ; DE to filename
+        inc hl
+        ld a,(hl)
+        dec hl
+        cp ':'                          ; set drive
+        jr nz,infcb0
+        ld a,(hl)
+        inc hl
+        inc hl
+        dec de
+        and 223
+        sub 64
+        ld (de),a
+        inc de
+infcb0: ld a,(hl)
+        or a
+        jr z,infcb2     ; if 00h, end of filename
+        cp '.'
+        jr nz,infcb1
+        inc hl
+        push ix
+        pop de          ; if '.', set DE to file extension
+        jr infcb0
+infcb1: ld (de),a       ; if not '.', set FCB name position
+        inc hl
+        inc de
+        jr infcb0
+infcb2: pop de
+        ret
+infcb3: ld (de),a
+        inc de
+        djnz infcb3
+        ret
+
+; ------------------------------------------
+; Set DMA to HL
+; Input : HL - DMA address
+; Output: none
+; Modify: AF,BC,HL
+; ------------------------------------------
+SETDMA: push de
+        ld d,h
+        ld e,l
+        ld c,1ah
+        call 5
+        pop de
+        ret

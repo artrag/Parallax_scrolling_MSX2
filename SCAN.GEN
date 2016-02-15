@@ -1,0 +1,71 @@
+
+scan
+
+        ld  ix,BUFFER1
+        LD  iy,(L8100)
+
+        xor a
+        ld  (ncol),a
+        ld  (nrig),a
+        ld  (nfnd),a
+
+        LD  B,VSCSZ                     ; VSCSZ blocchi per colonna
+scancol
+        push bc
+        LD  B,16                        ; 16 blocchi per riga
+nxtblk
+        LD  A,(iy+0)
+        ex  af,af'
+
+        ld  hl,ATTRTILES
+        ld  d,0
+        ld  e,a
+        add hl,de
+        LD  c,(HL)
+
+        ex  af,af'
+
+        bit 0,c
+        jr  z,notrasp         ; NON E’ TRASPARENTE
+        bit 3,c
+        jr  nz,notrasp        ; e’ un piolo
+        bit 1,c               ; e’ animato?
+
+        CALL    nz,L8428
+
+        ld  (ix+0),a
+        ld  a,(nrig)
+        inc a
+        x16 a
+        sub b
+        ld  (ix+BUFFER2-BUFFER1),a
+        ld  a,(nfnd)
+        inc a
+        ld  (nfnd),a
+
+
+notrasp
+        inc iy
+        DJNZ    nxtblk
+        ld  de,128-16
+        add iy,de
+
+        ld  a,(nrig)
+        inc a
+        ld  (nrig),a
+        pop bc
+
+        DJNZ    scancol
+
+        RET             ; FINITO
+
+
+
+ncol    db  0
+nrig    db  0
+
+
+BUFFER1
+        ds 4*16
+BUFFER2
+        ds 4*16
